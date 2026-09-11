@@ -5,6 +5,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
+from groq import Groq
 
 # Stable LCEL Imports
 from langchain_core.prompts import ChatPromptTemplate
@@ -70,6 +71,18 @@ def initialize_vector_store():
 
 vectorstore = initialize_vector_store()
 
+# Helper function to dynamically fetch active models from Groq
+def get_available_groq_models(api_key):
+    try:
+        client = Groq(api_key=api_key)
+        models_data = client.models.list()
+        # Filter for active chat models
+        model_ids = [model.id for model in models_data.data if not model.id.startswith("whisper")]
+        return sorted(model_ids) if model_ids else ["llama-3.1-8b-instant"]
+    except Exception:
+        # Fallback defaults if API call fails
+        return ["llama-3.1-8b-instant", "qwen/qwen3.6-27b", "openai/gpt-oss-120b"]
+
 # Sidebar Configuration
 with st.sidebar:
     st.header("⚙️ App Configuration")
@@ -91,15 +104,15 @@ with st.sidebar:
         value="Standard"
     )
 
-    # Active and active supported Groq models list
+    # Fetch models directly from Groq API
+    if groq_api_key:
+        available_models = get_available_groq_models(groq_api_key)
+    else:
+        available_models = ["llama-3.1-8b-instant"]
+
     model_name = st.selectbox(
         "Select Model",
-        options=[
-            "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant",
-            "llama-3.2-11b-vision-preview",
-            "gemma2-9b-it"
-        ]
+        options=available_models
     )
 
 # Chat History Setup
