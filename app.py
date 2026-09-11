@@ -60,7 +60,6 @@ Justice (R) Khalil-ur-Rehman Khan
 
 @st.cache_resource(show_spinner="Initializing Vector Database...")
 def initialize_vector_store():
-    # Convert raw text directly into Document objects without PDF loaders
     documents = [Document(page_content=RAW_TEXT, metadata={"source": "Cyber_laws_in_Pakistan.pdf"})]
     
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=40)
@@ -92,9 +91,15 @@ with st.sidebar:
         value="Standard"
     )
 
+    # Active and active supported Groq models list
     model_name = st.selectbox(
         "Select Model",
-        options=["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+        options=[
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "llama-3.2-11b-vision-preview",
+            "gemma2-9b-it"
+        ]
     )
 
 # Chat History Setup
