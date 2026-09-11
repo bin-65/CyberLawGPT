@@ -7,17 +7,17 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 
-# FIX: Standard and stable imports for LangChain v0.2+
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+# Stable LCEL Imports (Guaranteed to work across all LangChain versions)
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
-# Page Configuration
+# Page Setup
 st.set_page_config(page_title="CyberlawGPT", page_icon="⚖️", layout="wide")
 st.title("⚖️ CyberlawGPT")
 st.caption("AI-Powered Pakistan Cyber Law Assistant")
 
-# Fetch API Key securely from secrets.toml or environment variables
+# Retrieve API key from secrets or environment
 groq_api_key = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
 
 RAW_PDF_TEXT = """
@@ -64,14 +64,14 @@ def initialize_vector_store():
 
 vectorstore = initialize_vector_store()
 
-# Sidebar Setup
+# Sidebar Configuration
 with st.sidebar:
     st.header("⚙️ App Configuration")
     
     if not groq_api_key:
         groq_api_key = st.text_input("Groq API Key", type="password")
     else:
-        st.success("Groq API Key loaded via secrets.toml!")
+        st.success("Groq API Key loaded securely!")
 
     technical_level = st.select_slider(
         "Technical / Legal Level",
@@ -90,7 +90,7 @@ with st.sidebar:
         options=["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
     )
 
-# Chat History
+# Chat History Setup
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -98,10 +98,14 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User Input & RAG Chain
+# Helper function to format context documents
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
+
+# User Query Handling
 if prompt := st.chat_input("Ask a question about Pakistan Cyber Laws..."):
     if not groq_api_key:
-        st.error("Please provide a valid Groq API Key via secrets.toml or the sidebar input field.")
+        st.error("Please configure GROQ_API_KEY in Streamlit Secrets or enter it in the sidebar.")
         st.stop()
 
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -118,31 +122,34 @@ if prompt := st.chat_input("Ask a question about Pakistan Cyber Laws..."):
             
             system_prompt = f"""
             You are CyberlawGPT, an expert AI assistant on Cyber Laws in Pakistan.
-            Answer the user's question accurately using the provided context.
-            
-            Guidelines:
+            Answer the question based strictly on the retrieved legal context.
+
+            Formatting Rules:
             1. Target Audience Level: {technical_level}.
-            2. Detail Level: {response_size}.
-            3. Legal Disclaimer: Always include a brief note stating this is for informational purposes only.
+            2. Response Detail Level: {response_size}.
+            3. Disclaimer: Include a brief note that this information does not constitute formal legal counsel.
 
             Context:
             {{context}}
+            
+            Question: {{question}}
             """
 
-            prompt_template = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", "{input}"),
-            ])
-
+            prompt_template = ChatPromptTemplate.from_template(system_prompt)
             retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-            question_answer_chain = create_stuff_documents_chain(llm, prompt_template)
-            rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
-            response = rag_chain.invoke({"input": prompt})
-            answer = response["answer"]
+            # LCEL RAG Pipeline construction
+            rag_chain = (
+                {"context": retriever | format_docs, "question": RunnablePassthrough()}
+                | prompt_template
+                | llm
+                | StrOutputParser()
+            )
+
+            answer = rag_chain.invoke(prompt)
 
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
 
         except Exception as e:
-            st.error(f"Execution Error: {str(e)}")
+            st.error(f"Error: {str(e)}")
